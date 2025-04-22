@@ -21,7 +21,7 @@ from langgraph.graph import END, StateGraph
 from log.logging import get_logging
 from pymilvus import MilvusClient
 from service.agent.prompts import basic_system_prompt_with_vector_search
-from service.model.agent import AgentState, ChatRequest, ChatState
+from service.model.agent import ChatRequest, ChatState
 from service.vectordb.milvus import search_vectors_info
 from sqlalchemy.orm import Session
 
