@@ -1,0 +1,30 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "donjayamanne.python-extension-pack",
+    "njpwerner.autodocstring",
+    "jasonmejane.base64viewer",
+    "aaron-bond.better-comments",
+    "jeff-hykin.better-shellscript-syntax",
+    "streetsidesoftware.code-spell-checker",
+    "naumovs.color-highlight",
+    "anseki.vscode-color",
+    "ms-azuretools.vscode-docker",
+    "cschlosser.doxdocgen",
+    "mhutchie.git-graph",
+    "eamodio.gitlens",
+    "oderwat.indent-rainbow",
+    "qufiwefefwoyn.inline-sql-syntax",
+    "meezilla.json",
+    "pkief.material-icon-theme",
+    "equinusocio.vsc-material-theme",
+    "ibm.output-colorizer",
+    "ms-python.vscode-pylance",
+    "donjayamanne.python-environment-manager",
+    "kevinrose.vsc-python-indent",
+    "rangav.vscode-thunder-client",
+    "ms-python.black-formatter",
+    "ms-python.isort",
+    "lokalise.i18n-ally"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+      {
+          "label": "mysql-launch --stateless",
+          "type": "docker-run",
+          "dockerRun": {
+            "containerName": "mysql-admin",
+            "image": "mysql:8.0",
+            "env": {
+              "MYSQL_ROOT_PASSWORD": "admin",
+              "MYSQL_DATABASE": "mysql-admin",
+              "MYSQL_USER": "admin",
+              "MYSQL_PASSWORD": "admin"
+            },
+            "network": "bridge",
+            "ports": [
+              {
+                "containerPort": 3306,
+                "hostPort": 3306
+              }
+            ]      
+          }
+      }
+  ]
+}

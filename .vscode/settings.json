@@ -1,0 +1,105 @@
+{
+  // global
+  "thunder-client.saveToWorkspace": false,
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  // python
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.formatOnSave": false,
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "python.analysis.typeCheckingMode": "off",
+  "python.jediEnabled": true,
+  "isort.args": ["--profile", "black"],
+
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": true, // pylint 활성화
+  "python.linting.flake8Enabled": false, // flake8 비활성화 (선택 사항)
+  "python.linting.lintOnSave": true
+
+
+  //spell checker
+  "cSpell.words": [
+    "adot",
+    "AICC",
+    "apikey",
+    "apiversion",
+    "asizeof",
+    "azureformrecognizer",
+    "backref",
+    "bingsearch",
+    "checkpointer",
+    "codewrite",
+    "corus",
+    "createnextapp",
+    "dalle",
+    "dateutil",
+    "dompurify",
+    "echarts",
+    "embbeding",
+    "expc",
+    "fastapi",
+    "fewshot",
+    "formrecognizer",
+    "hgetall",
+    "httpx",
+    "ISKN",
+    "isoparse",
+    "jsonable",
+    "langchain",
+    "langgraph",
+    "localfile",
+    "mfile",
+    "mgroup",
+    "Mybox",
+    "MYBOXADMIN",
+    "myboxfile",
+    "myboxfiles",
+    "myboxgroup",
+    "myboxs",
+    "mychat",
+    "myrequest",
+    "Noti",
+    "Notistack",
+    "onupdate",
+    "openai",
+    "opensearch",
+    "opensearchpy",
+    "originjs",
+    "outerjoin",
+    "passlib",
+    "prec",
+    "pydantic",
+    "pytz",
+    "readall",
+    "replanner",
+    "reqs",
+    "Retriver",
+    "rolename",
+    "sessionmaker",
+    "shieldus",
+    "skcc",
+    "sourcefileid",
+    "sourcepage",
+    "SQLALCHEMY",
+    "starlette",
+    "stopword",
+    "SUPERADMIN",
+    "swiper",
+    "tanstack",
+    "tiktoken",
+    "tiptap",
+    "tooks",
+    "txid",
+    "userid",
+    "uvicorn",
+    "vadot",
+    "vectorstore",
+    "xmltodict"
+  ]
+}
