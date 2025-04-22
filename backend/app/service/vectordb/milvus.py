@@ -44,7 +44,7 @@ def search_vectors_info(milvus: MilvusClient, query: str, collection_name: str, 
         res = milvus.search(
             collection_name=collection_name,
             data=query_vector.tolist(),
-            limit=3,
+            limit=k,
             search_params=search_params,
             output_fields=["text", "vector"],
         )
