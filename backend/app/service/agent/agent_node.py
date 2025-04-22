@@ -7,22 +7,30 @@ import openai
 from core.config import get_setting
 from database.repository.chat_history import ChatHistory
 from fastapi import HTTPException
+from langchain.chains.llm import LLMChain
 from langchain.memory import ConversationBufferMemory
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.prompts import (
+    ChatPromptTemplate,
+    MessagesPlaceholder,
+    PromptTemplate,
+)
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_openai import ChatOpenAI
-from langgraph.graph import StateGraph
+from langgraph.graph import END, StateGraph
+from log.logging import get_logging
 from pymilvus import MilvusClient
 from service.agent.prompts import basic_system_prompt_with_vector_search
-from service.model.agent import ChatRequest, ChatState
+from service.model.agent import AgentState, ChatRequest, ChatState
 from service.vectordb.milvus import search_vectors_info
 from sqlalchemy.orm import Session
 
 settings = get_setting()
+logger = get_logging()
 
 OPENAI_API_KEY = settings.OPENAI_API_KEY
 USER_ID = settings.USER_ID
+
 
 def workflow_builder1(request: ChatRequest, db: Session):
     graph = StateGraph(ChatState)
@@ -208,3 +216,119 @@ def output_node(state: "ChatState", user_id: str, db: Session) -> Dict:
     db.commit()
 
     return {"response": state.response}
+
+
+def best_pratice(request, collection_name: str, db, milvus) -> Dict:
+    # LLM 설정
+    llm = ChatOpenAI(model="gpt-4")
+
+    # 0. Rewriter Agent
+    rewriter_prompt = PromptTemplate.from_template(
+        "사용자의 원래 질문: {query}\n이 질문을 더 명확하고 이해하기 쉽게 다시 표현해줘."
+    )
+    rewriter_chain = LLMChain(llm=llm, prompt=rewriter_prompt)
+
+    def rewriter_node(state):
+        rewritten = rewriter_chain.run(query=state["query"])
+        logger.info(f"🔁 Rewritten Query: {rewritten}")
+        return {**state, "rewritten_query": rewritten, "next_step": "retrieve"}
+
+    # 1. Planner Agent (가장 먼저 실행)
+    planner_prompt = PromptTemplate.from_template(
+        """사용자의 질문: {query}
+
+다음 작업을 계획하고, 다음 단계 하나를 결정해줘.
+가능한 다음 단계는 retrieve, rewrite, retrieve, generate, reflect, end 중 하나야.
+- 인사나 일상 대화 같은 간단한 질문이면 generate를 선택해.
+- 쿼리 정제가 필요하면 rewrite를 선택해.
+- 정보 검색이 필요하면 retrieve를 선택해.
+
+형식:
+계획: <계획 내용>
+다음 단계: <retrieve|rewrite|generate>
+""")
+    planner_chain = LLMChain(llm=llm, prompt=planner_prompt)
+
+    def planner_node(state):
+        output = planner_chain.run(rewritten_query=state["rewritten_query"])
+        lines = output.strip().splitlines()
+        plan = "\n".join([line for line in lines if not line.lower().startswith("다음 단계:")])
+        next_step_line = next((line for line in lines if line.lower().startswith("다음 단계:")), None)
+        next_step = next_step_line.split(":", 1)[1].strip().lower() if next_step_line else "generate"
+        logger.info(f"🗺️ Plan:\n{plan}")
+        logger.info(f"➡️ Next Step: {next_step}")
+        return {**state, "plan": plan, "next_step": next_step}
+
+    def get_next_step_from_plan(state):
+        return state.get("next_step", "generate")
+
+    # 2. Retriever Agent
+    def retriever_node(state):
+        try:
+            search_result = search_vectors_info(milvus=milvus, query=state["query"], collection_name=collection_name)
+            parsed = search_result[0][0]["entity"]["text"]
+            logger.info(f"📄 Retrieved Document:\n{parsed}")
+            return {**state, "documents": parsed, "next_step": "generate"}
+        except Exception as e:
+            logger.exception("Retriever Error")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # 3. Generator Agent
+    generator_prompt = PromptTemplate.from_template(
+        "사용자 질문: {rewritten_query}\n관련 문서: {documents}\n이 정보를 바탕으로 응답을 생성해줘."
+    )
+    generator_chain = LLMChain(llm=llm, prompt=generator_prompt)
+
+    def generator_node(state):
+        response = generator_chain.run(
+            rewritten_query=state["rewritten_query"],
+            documents="\n".join(state.get("documents", []))
+        )
+        logger.info(f"📝 Response:\n{response}")
+        return {**state, "response": response, "next_step": "reflect"}
+
+    # 4. Reflector Agent
+    reflector_prompt = PromptTemplate.from_template(
+        "응답: {response}\n이 응답이 사용자 질문에 정확히 답하고 있는지 평가해줘. 부족하거나 개선할 점이 있다면 설명하고, 괜찮으면 OK라고 해줘."
+    )
+    reflector_chain = LLMChain(llm=llm, prompt=reflector_prompt)
+
+    def reflector_node(state):
+        feedback = reflector_chain.run(response=state["response"])
+        next_step = "end" if "OK" in feedback else "generate"
+        logger.info(f"Feedback:\n{feedback}")
+        logger.info(f"Feedback judged next_step = {next_step}")
+        return {**state, "feedback": feedback, "next_step": next_step}
+
+    # 그래프 구성
+    graph_builder = StateGraph(dict)
+    graph_builder.add_node("plan", RunnableLambda(planner_node))
+    graph_builder.add_node("rewrite", RunnableLambda(rewriter_node))
+    graph_builder.add_node("retrieve", RunnableLambda(retriever_node))
+    graph_builder.add_node("generate", RunnableLambda(generator_node))
+    graph_builder.add_node("reflect", RunnableLambda(reflector_node))
+
+    graph_builder.set_entry_point("plan")
+    graph_builder.add_conditional_edges("plan", get_next_step_from_plan, {
+        "rewrite": "rewrite",
+        "retrieve": "retrieve",
+        "generate": "generate",
+        "reflect": "reflect",
+        "end": END,
+    })
+    graph_builder.add_edge("rewrite", "plan")
+    graph_builder.add_edge("retrieve", "generate")
+    graph_builder.add_edge("generate", "reflect")
+    graph_builder.add_conditional_edges("reflect", get_next_step_from_plan, {
+        "generate": "generate",
+        "end": END,
+    })
+
+    # 실행
+    app = graph_builder.compile()
+    initial_state = {"query": request.message}
+    result = app.invoke(initial_state)
+
+    logger.info(f"Final Response: {result['response']}")
+    logger.info(f"Final Feedback: {result.get('feedback', 'N/A')}")
+    return result

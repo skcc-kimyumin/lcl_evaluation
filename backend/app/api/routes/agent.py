@@ -2,6 +2,7 @@ from api.deps import DatabaseDep, MilvusDep
 from fastapi import APIRouter, Depends, HTTPException
 from langchain.memory import ConversationBufferMemory
 from service.agent.agent_node import (
+    best_pratice,
     workflow_builder1,
     workflow_builder2,
     workflow_builder3,
@@ -45,6 +46,17 @@ async def chat3(request: ChatRequest, collection_name: str, db: DatabaseDep, mil
     try:
         # LangGraph 실행
         result = workflow_builder3(request, collection_name, db, milvus, memory)
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/chat4")
+async def chat4(request: ChatRequest, collection_name: str, db: DatabaseDep, milvus: MilvusDep):
+    try:
+        # LangGraph 실행
+        result = best_pratice(request, collection_name, db, milvus)
         return result
 
     except Exception as e:

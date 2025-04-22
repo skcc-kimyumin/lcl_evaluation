@@ -28,6 +28,8 @@ FastAPI 프로젝트를 실행하기 위해 먼저 Conda를 설치해야 합니�
 
 ### 2. VSCode에서 가상환경 생성
 터미널을 열고 아래 명령어를 실행하여 새로운 Conda 가상환경을 생성합니다.
+생성시 ssl 오류가 발생하면 아래 명령어를 입력하여 임시로 ssl을 비활성화하여 설치해주세요
+conda config --set ssl_verify false
 
 ```sh
 conda create -n edu-template python=3.10
@@ -48,6 +50,7 @@ VSCode에서 Conda 가상환경을 사용하려면, 아래 절차를 따릅니�
 
 
 ### 4. 아래 명령어를 실행하여 requirements.txt 파일에 정의된 패키지를 설치합니다.
+cd backend/app으로 이동 후 아래 명령어 수행
 
 ```sh
 pip install --upgrade pip
@@ -56,10 +59,11 @@ pip install -r requirements.txt
 
 ### 5. VSCode에서 Task 실행
 VSCode에서 특정 작업을 자동화하기 위해 `tasks.json`을 사용합니다. 아래 절차를 통해 task를 실행할 수 있습니다.
+아래 명령어를 통해 task를 수행합니다. task 목록에 mysql-launch --stateless가 나오지 않을 경우에는
+Ctrl + Shift + X (확장기능) -> “Docker Extension” 검색 -> 설치 후 VSCode 재시작 하시면 정상적으로 목록에 출력됩니다.
 
 1. `Ctrl + Shift + P`를 눌러 "Tasks: Run Task"를 검색합니다.
-2. 원하는 Task를 선택하여 실행합니다.
-3. `tasks.json` 파일을 참고하여 적절한 Task를 설정할 수 있습니다.
+2. mysql-launch --stateless Task를 선택하여 실행합니다.
 
 
 ### 6. Debug로 Backend 실행
