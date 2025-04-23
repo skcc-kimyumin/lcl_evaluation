@@ -229,11 +229,15 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     planner_prompt = PromptTemplate.from_template(
         """사용자의 질문: {query}
 
-다음 작업을 계획하고, 다음 단계 하나를 결정해줘.
-가능한 다음 단계는 rewrite, retrieve, generate 중 하나야.
-- 인사나 일상 대화 같은 간단한 질문이면 generate를 선택해.
-- 쿼리 정제가 필요하면 rewrite를 선택해.
-- 정보 검색이 필요하면 retrieve를 선택해.
+사용자의 질문을 기반으로 작업을 계획하고, 다음 작업단계를 결정해줘.
+
+작업단계 결정을 위한 조건은 아래와 같으며, rewrite, retrieve, generate 중 하나를 선택해줘.
+- 인사나 일상 대화 같은 간단한 질문이면 generate를 선택.
+- 쿼리 정제가 필요하면 rewrite를 선택.
+- 정보 검색이 필요하면 retrieve를 선택.
+- 그 외의 모든 경우는 generate를 선택.
+
+계획과, 다음 작업단계가 결정되었다면, 아래 형식에 따라 답변해줘.
 
 형식:
 계획: <계획 내용>
@@ -250,7 +254,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         next_step_line = next((line for line in lines if line.lower().startswith("다음 단계:")), None)
         next_step = next_step_line.split(":", 1)[1].strip().lower() if next_step_line else "generate"
         logger.info(f"Plan:\n{plan}")
-        logger.info(f"➡️ Next Step: {next_step}")
+        logger.info(f"Next Step: {next_step}")
         return {**state, "plan": plan, "next_step": next_step}
 
 
@@ -258,14 +262,14 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
     # 1. Rewriter Agent
     rewriter_prompt = PromptTemplate.from_template(
-        "사용자의 원래 질문: {query}\n이 질문을 더 명확하고 이해하기 쉽게 다시 표현해줘."
+        "사용자의 원래 질문: {query}\n이 질문의 목적을 파악 후, 더 명확하고 이해하기 쉽게 표현해줘"
     )
     rewriter_chain = rewriter_prompt | llm
 
     def rewriter_node(state):
         logger.info("=================Rewriter node 시작 =================")
         rewritten = rewriter_chain.invoke({"query": state["query"]}).content
-        logger.info(f"🔁 Rewritten Query: {rewritten}")
+        logger.info(f"Rewritten Query: {rewritten}")
         return {**state, "rewritten_query": rewritten, "next_step": "retrieve"}    
 
 
@@ -298,7 +302,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
             "query": query_for_generator,
             "documents": "\n".join(state.get("documents", []))
         }).content
-        logger.info(f"📝 Response:\n{response}")
+        logger.info(f"Response:\n{response}")
         return {**state, "response": response, "next_step": "reflect"}
 
 
@@ -322,7 +326,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         }).content
         next_step = "end" if "OK" in feedback else "generate"
         logger.info(f"Feedback:\n{feedback}")
-        logger.info(f"➡️ Feedback judged next_step = {next_step}")
+        logger.info(f"Feedback judged next_step = {next_step}")
         return {**state, "feedback": feedback, "next_step": next_step}
 
 
