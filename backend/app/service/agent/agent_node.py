@@ -222,18 +222,10 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     # LLM 설정
     llm = ChatOpenAI(model="gpt-4")
 
-    # 0. Rewriter Agent
-    rewriter_prompt = PromptTemplate.from_template(
-        "사용자의 원래 질문: {query}\n이 질문을 더 명확하고 이해하기 쉽게 다시 표현해줘."
-    )
-    rewriter_chain = LLMChain(llm=llm, prompt=rewriter_prompt)
+    def get_next_step_from_plan(state):
+        return state.get("next_step", "generate")    
 
-    def rewriter_node(state):
-        rewritten = rewriter_chain.run(query=state["query"])
-        logger.info(f"🔁 Rewritten Query: {rewritten}")
-        return {**state, "rewritten_query": rewritten, "next_step": "retrieve"}
-
-    # 1. Planner Agent (가장 먼저 실행)
+    # 0. Planner Agent (가장 먼저 실행)
     planner_prompt = PromptTemplate.from_template(
         """사용자의 질문: {query}
 
@@ -250,25 +242,36 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     planner_chain = LLMChain(llm=llm, prompt=planner_prompt)
 
     def planner_node(state):
+        logger.info("=================Planner node 시작 =================")
         query_for_planner = state.get("rewritten_query") or state["query"]
         output = planner_chain.run(query=query_for_planner)
         lines = output.strip().splitlines()
         plan = "\n".join([line for line in lines if not line.lower().startswith("다음 단계:")])
         next_step_line = next((line for line in lines if line.lower().startswith("다음 단계:")), None)
         next_step = next_step_line.split(":", 1)[1].strip().lower() if next_step_line else "generate"
-        logger.info(f"🗺️ Plan:\n{plan}")
+        logger.info(f"Plan:\n{plan}")
         logger.info(f"➡️ Next Step: {next_step}")
         return {**state, "plan": plan, "next_step": next_step}
 
-    def get_next_step_from_plan(state):
-        return state.get("next_step", "generate")
+    # 1. Rewriter Agent, 일상질문일 경우 해당 단계 없이 바로 generator
+    rewriter_prompt = PromptTemplate.from_template(
+        "사용자의 원래 질문: {query}\n이 질문을 더 명확하고 이해하기 쉽게 다시 표현해줘."
+    )
+    rewriter_chain = LLMChain(llm=llm, prompt=rewriter_prompt)
+
+    def rewriter_node(state):
+        logger.info("=================Rewriter node 시작 =================")
+        rewritten = rewriter_chain.run(query=state["query"])
+        logger.info(f"🔁 Rewritten Query: {rewritten}")
+        return {**state, "rewritten_query": rewritten, "next_step": "retrieve"}    
 
     # 2. Retriever Agent
     def retriever_node(state):
+        logger.info("=================Retriever node 시작 =================")
         try:
             search_result = search_vectors_info(milvus=milvus, query=state["query"], collection_name=collection_name)
             parsed = search_result[0][0]["entity"]["text"]
-            logger.info(f"📄 Retrieved Document:\n{parsed}")
+            # logger.info(f"Retrieved Document:\n{parsed}")
             return {**state, "documents": parsed, "next_step": "generate"}
         except Exception as e:
             logger.exception("Retriever Error")
@@ -281,6 +284,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     generator_chain = LLMChain(llm=llm, prompt=generator_prompt)
 
     def generator_node(state):
+        logger.info("=================Generator node 시작 =================")
         query_for_generator = state.get("rewritten_query") or state["query"]
         response = generator_chain.run(
             query=query_for_generator,
@@ -299,11 +303,12 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     reflector_chain = LLMChain(llm=llm, prompt=reflector_prompt)
 
     def reflector_node(state):
+        logger.info("=================Reflector node 시작 =================")
         query_for_reflector = state.get("rewritten_query") or state["query"]
         feedback = reflector_chain.run(response=state["response"], query=query_for_reflector)
         next_step = "end" if "OK" in feedback else "generate"
         logger.info(f"Feedback:\n{feedback}")
-        logger.info(f"Feedback judged next_step = {next_step}")
+        logger.info(f"➡️ Feedback judged next_step = {next_step}")
         return {**state, "feedback": feedback, "next_step": next_step}
 
     # 그래프 구성
@@ -338,7 +343,6 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     except Exception as e:
         logger.exception("Invoke error")
         raise HTTPException(status_code=500, detail=str(e))
-     
 
     logger.info(f"Final Response: {result['response']}")
     logger.info(f"Final Feedback: {result.get('feedback', 'N/A')}")
