@@ -250,7 +250,8 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     planner_chain = LLMChain(llm=llm, prompt=planner_prompt)
 
     def planner_node(state):
-        output = planner_chain.run(rewritten_query=state["rewritten_query"])
+        query_for_planner = state.get("rewritten_query") or state["query"]
+        output = planner_chain.run(query=query_for_planner)
         lines = output.strip().splitlines()
         plan = "\n".join([line for line in lines if not line.lower().startswith("다음 단계:")])
         next_step_line = next((line for line in lines if line.lower().startswith("다음 단계:")), None)
@@ -275,13 +276,14 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
     # 3. Generator Agent
     generator_prompt = PromptTemplate.from_template(
-        "사용자 질문: {rewritten_query}\n관련 문서: {documents}\n이 정보를 바탕으로 응답을 생성해줘."
+        "사용자 질문: {query}\n관련 문서: {documents}\n이 정보를 바탕으로 응답을 생성해줘."
     )
     generator_chain = LLMChain(llm=llm, prompt=generator_prompt)
 
     def generator_node(state):
+        query_for_generator = state.get("rewritten_query") or state["query"]
         response = generator_chain.run(
-            rewritten_query=state["rewritten_query"],
+            query=query_for_generator,
             documents="\n".join(state.get("documents", []))
         )
         logger.info(f"📝 Response:\n{response}")
@@ -289,12 +291,16 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
     # 4. Reflector Agent
     reflector_prompt = PromptTemplate.from_template(
-        "응답: {response}\n이 응답이 사용자 질문에 정확히 답하고 있는지 평가해줘. 부족하거나 개선할 점이 있다면 설명하고, 괜찮으면 OK라고 해줘."
+        """질문: {query}\n 응답: {response}\n
+        질문이 인사나 일상 대화 같은 간단한 질문이면 무조건 OK라고 답변해줘.
+        그 외의 질문이라면 질문에 대한 답변을 평가하는게 너의 역할이야.
+        부족하거나 개선할 점이 있다면 설명하고, 괜찮은 답변이라면 OK라고 답변해줘."""
     )
     reflector_chain = LLMChain(llm=llm, prompt=reflector_prompt)
 
     def reflector_node(state):
-        feedback = reflector_chain.run(response=state["response"])
+        query_for_reflector = state.get("rewritten_query") or state["query"]
+        feedback = reflector_chain.run(response=state["response"], query=query_for_reflector)
         next_step = "end" if "OK" in feedback else "generate"
         logger.info(f"Feedback:\n{feedback}")
         logger.info(f"Feedback judged next_step = {next_step}")
@@ -325,9 +331,14 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     })
 
     # 실행
-    app = graph_builder.compile()
-    initial_state = {"query": request.message}
-    result = app.invoke(initial_state)
+    try:
+        app = graph_builder.compile()
+        initial_state = {"query": request.message}
+        result = app.invoke(initial_state)
+    except Exception as e:
+        logger.exception("Invoke error")
+        raise HTTPException(status_code=500, detail=str(e))
+     
 
     logger.info(f"Final Response: {result['response']}")
     logger.info(f"Final Feedback: {result.get('feedback', 'N/A')}")
