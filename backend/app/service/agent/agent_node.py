@@ -253,6 +253,9 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         logger.info(f"➡️ Next Step: {next_step}")
         return {**state, "plan": plan, "next_step": next_step}
 
+
+
+
     # 1. Rewriter Agent
     rewriter_prompt = PromptTemplate.from_template(
         "사용자의 원래 질문: {query}\n이 질문을 더 명확하고 이해하기 쉽게 다시 표현해줘."
@@ -265,6 +268,9 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         logger.info(f"🔁 Rewritten Query: {rewritten}")
         return {**state, "rewritten_query": rewritten, "next_step": "retrieve"}    
 
+
+
+
     # 2. Retriever Agent
     def retriever_node(state):
         logger.info("=================Retriever node 시작 =================")
@@ -275,6 +281,9 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         except Exception as e:
             logger.exception("Retriever Error")
             raise HTTPException(status_code=500, detail=str(e))
+
+
+
 
     # 3. Generator Agent
     generator_prompt = PromptTemplate.from_template(
@@ -291,6 +300,9 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         }).content
         logger.info(f"📝 Response:\n{response}")
         return {**state, "response": response, "next_step": "reflect"}
+
+
+
 
     # 4. Reflector Agent
     reflector_prompt = PromptTemplate.from_template(
@@ -313,7 +325,10 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         logger.info(f"➡️ Feedback judged next_step = {next_step}")
         return {**state, "feedback": feedback, "next_step": next_step}
 
-    # 그래프 구성
+
+
+
+    # 5. 그래프 구성
     graph_builder = StateGraph(dict)
     graph_builder.add_node("plan", RunnableLambda(planner_node))
     graph_builder.add_node("rewrite", RunnableLambda(rewriter_node))
@@ -337,7 +352,10 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         "end": END,
     })
 
-    # 실행
+
+
+
+    # 6. 실행
     try:
         app = graph_builder.compile()
         initial_state = {"query": request.message}
