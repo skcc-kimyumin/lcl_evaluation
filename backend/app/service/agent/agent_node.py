@@ -230,7 +230,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         """사용자의 질문: {query}
 
 다음 작업을 계획하고, 다음 단계 하나를 결정해줘.
-가능한 다음 단계는 retrieve, rewrite, retrieve, generate, reflect, end 중 하나야.
+가능한 다음 단계는 rewrite, retrieve, generate 중 하나야.
 - 인사나 일상 대화 같은 간단한 질문이면 generate를 선택해.
 - 쿼리 정제가 필요하면 rewrite를 선택해.
 - 정보 검색이 필요하면 retrieve를 선택해.
