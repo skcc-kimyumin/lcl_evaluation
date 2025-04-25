@@ -304,7 +304,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
             "documents": "\n".join(state.get("documents", []))
         }).content
         logger.info(f"Response:\n{response}")
-        return {**state, "response": response, "next_step": "reflect"}
+        return {**state, "response": response, "next_step": "reflection"}
 
 
 
@@ -333,7 +333,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     graph_builder.add_node("hyde", RunnableLambda(hyde_node))
     graph_builder.add_node("retrieve", RunnableLambda(retriever_node))
     graph_builder.add_node("generate", RunnableLambda(generator_node))
-    graph_builder.add_node("reflect", RunnableLambda(reflector_node))
+    graph_builder.add_node("reflection", RunnableLambda(reflector_node))
 
     graph_builder.set_entry_point("plan")
     graph_builder.add_conditional_edges("plan", get_next_step_from_plan, {
@@ -345,8 +345,8 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     graph_builder.add_edge("rewrite", "hyde")
     graph_builder.add_edge("hyde", "retrieve")
     graph_builder.add_edge("retrieve", "generate")
-    graph_builder.add_edge("generate", "reflect")
-    graph_builder.add_conditional_edges("reflect", get_next_step_from_plan, {
+    graph_builder.add_edge("generate", "reflection")
+    graph_builder.add_conditional_edges("reflection", get_next_step_from_plan, {
         "generate": "generate",
         "end": END,
     })
