@@ -20,7 +20,14 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import END, StateGraph
 from log.logging import get_logging
 from pymilvus import MilvusClient
-from service.agent.prompts import basic_system_prompt_with_vector_search
+from service.agent.prompts import (
+    basic_system_prompt_with_vector_search,
+    generator_prompt,
+    hyde_prompt,
+    planner_prompt,
+    reflector_prompt,
+    rewriter_prompt,
+)
 from service.model.agent import ChatRequest, ChatState
 from service.vectordb.milvus import search_vectors_info
 from sqlalchemy.orm import Session
@@ -225,25 +232,9 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     def get_next_step_from_plan(state):
         return state.get("next_step", "generate")    
 
-    # 0. Planner Agent
-    planner_prompt = PromptTemplate.from_template(
-        """사용자의 질문: {query}
-
-사용자의 질문을 기반으로 작업을 계획하고, 다음 작업단계를 결정해줘.
-
-작업단계 결정을 위한 조건은 아래와 같으며, rewrite, hyde, generate 중 하나를 선택해줘.
-- 인사나 일상 대화 같은 간단한 질문이면 generate를 선택.
-- 쿼리 정제가 필요하면 rewrite를 선택.
-- 정보 검색이 필요하면 hyde를 선택.
-- 그 외의 모든 경우는 generate를 선택.
-
-계획과, 다음 작업단계가 결정되었다면, 아래 형식에 따라 답변해줘.
-
-형식:
-계획: <계획 내용>
-다음 단계: <rewrite|hyde|generate>
-""")
-    planner_chain = planner_prompt | llm
+    # 1. Planner Agent
+    planner_prompt_template = PromptTemplate.from_template(planner_prompt)
+    planner_chain = planner_prompt_template | llm
 
     def planner_node(state):
         logger.info("=================Planner node 시작 =================")
@@ -258,11 +249,9 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         return {**state, "plan": plan, "next_step": next_step}
 
 
-    # 1. Rewriter Agent
-    rewriter_prompt = PromptTemplate.from_template(
-        "사용자의 원래 질문: {query}\n이 질문의 목적을 파악 후, 더 명확하고 이해하기 쉽게 표현해줘"
-    )
-    rewriter_chain = rewriter_prompt | llm
+    # 2. Rewriter Agent
+    rewriter_prompt_template = PromptTemplate.from_template(rewriter_prompt)
+    rewriter_chain = rewriter_prompt_template | llm
 
     def rewriter_node(state):
         logger.info("=================Rewriter node 시작 =================")
@@ -272,11 +261,9 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
 
 
-   # 1.5 HyDE Agent
-    hyde_prompt = PromptTemplate.from_template(
-        "사용자의 질문: {query}\n이 질문의 답변으로 사용 될 수 있는 가상의 사례를 2가지만 생성해줘"
-    )
-    hyde_chain = hyde_prompt | llm
+   # 3. HyDE Agent
+    hyde_prompt_template = PromptTemplate.from_template(hyde_prompt)
+    hyde_chain = hyde_prompt_template | llm
 
     def hyde_node(state):
         logger.info("=================HyDE node 시작 =================")
@@ -287,7 +274,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
 
 
-    # 2. Retriever Agent
+    # 4. Retriever Agent
     def retriever_node(state):
         logger.info("=================Retriever node 시작 =================")
         try:
@@ -305,11 +292,9 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
 
 
-    # 3. Generator Agent
-    generator_prompt = PromptTemplate.from_template(
-        "사용자 질문: {query}\n관련 문서: {documents}\n이 정보를 바탕으로 응답을 생성해줘."
-    )
-    generator_chain = generator_prompt | llm
+    # 5. Generator Agent
+    generator_prompt_template = PromptTemplate.from_template(generator_prompt)
+    generator_chain = generator_prompt_template | llm
 
     def generator_node(state):
         logger.info("=================Generator node 시작 =================")
@@ -323,14 +308,9 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
 
 
-    # 4. Reflector Agent
-    reflector_prompt = PromptTemplate.from_template(
-        """질문: {query}\n 응답: {response}\n
-        질문이 인사나 일상 대화 같은 간단한 질문이면 무조건 OK라고 답변해줘.
-        그 외의 질문이라면 질문에 대한 답변을 평가하는게 너의 역할이야.
-        부족하거나 개선할 점이 있다면 설명하고, 괜찮은 답변이라면 OK라고 답변해줘."""
-    )
-    reflector_chain = reflector_prompt | llm
+    # 6. Reflector Agent
+    reflector_prompt_template = PromptTemplate.from_template(reflector_prompt)
+    reflector_chain = reflector_prompt_template | llm
 
     def reflector_node(state):
         logger.info("=================Reflector node 시작 =================")
@@ -346,7 +326,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
 
 
-    # 5. 그래프 구성
+    # 7. 그래프 구성
     graph_builder = StateGraph(dict)
     graph_builder.add_node("plan", RunnableLambda(planner_node))
     graph_builder.add_node("rewrite", RunnableLambda(rewriter_node))
@@ -373,7 +353,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
 
 
-    # 6. 실행
+    # 8. 실행
     try:
         app = graph_builder.compile()
         initial_state = {"query": request.message}
