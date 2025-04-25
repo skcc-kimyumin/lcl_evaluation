@@ -231,17 +231,17 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
 사용자의 질문을 기반으로 작업을 계획하고, 다음 작업단계를 결정해줘.
 
-작업단계 결정을 위한 조건은 아래와 같으며, rewrite, retrieve, generate 중 하나를 선택해줘.
+작업단계 결정을 위한 조건은 아래와 같으며, rewrite, hyde, generate 중 하나를 선택해줘.
 - 인사나 일상 대화 같은 간단한 질문이면 generate를 선택.
 - 쿼리 정제가 필요하면 rewrite를 선택.
-- 정보 검색이 필요하면 retrieve를 선택.
+- 정보 검색이 필요하면 hyde를 선택.
 - 그 외의 모든 경우는 generate를 선택.
 
 계획과, 다음 작업단계가 결정되었다면, 아래 형식에 따라 답변해줘.
 
 형식:
 계획: <계획 내용>
-다음 단계: <rewrite|retrieve|generate>
+다음 단계: <rewrite|hyde|generate>
 """)
     planner_chain = planner_prompt | llm
 
@@ -273,19 +273,37 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         return {**state, "rewritten_query": rewritten, "next_step": "retrieve"}    
 
 
+   # 1.5 HyDE Agent
+    hyde_prompt = PromptTemplate.from_template(
+        "사용자의 질문: {query}\n이 질문의 답변으로 사용 될 수 있는 가상의 사례를 2가지만 생성해줘"
+    )
+    hyde_chain = hyde_prompt | llm
+
+    def hyde_node(state):
+        logger.info("=================HyDE node 시작 =================")
+        query_for_hyde = state.get("rewritten_query") or state["query"]
+        hypothetical_doc = hyde_chain.invoke({"query": query_for_hyde}).content
+        logger.info(f"Hypothetical Document: {hypothetical_doc}")
+        return {**state, "hypothetical_doc": hypothetical_doc, "next_step": "retrieve"}
+
+
 
 
     # 2. Retriever Agent
     def retriever_node(state):
         logger.info("=================Retriever node 시작 =================")
         try:
-            search_result = search_vectors_info(milvus=milvus, query=state["query"], collection_name=collection_name)
+            query_for_retrieve = state.get("hypothetical_doc") or state["query"]
+            search_result = search_vectors_info(
+                milvus=milvus,
+                query=query_for_retrieve,
+                collection_name=collection_name
+            )
             parsed = search_result[0][0]["entity"]["text"]
             return {**state, "documents": parsed, "next_step": "generate"}
         except Exception as e:
             logger.exception("Retriever Error")
             raise HTTPException(status_code=500, detail=str(e))
-
 
 
 
@@ -336,6 +354,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     graph_builder = StateGraph(dict)
     graph_builder.add_node("plan", RunnableLambda(planner_node))
     graph_builder.add_node("rewrite", RunnableLambda(rewriter_node))
+    graph_builder.add_node("hyde", RunnableLambda(hyde_node))
     graph_builder.add_node("retrieve", RunnableLambda(retriever_node))
     graph_builder.add_node("generate", RunnableLambda(generator_node))
     graph_builder.add_node("reflect", RunnableLambda(reflector_node))
@@ -343,12 +362,12 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     graph_builder.set_entry_point("plan")
     graph_builder.add_conditional_edges("plan", get_next_step_from_plan, {
         "rewrite": "rewrite",
-        "retrieve": "retrieve",
+        "hyde": "hyde",
         "generate": "generate",
-        "reflect": "reflect",
         "end": END,
     })
-    graph_builder.add_edge("rewrite", "plan")
+    graph_builder.add_edge("rewrite", "hyde")
+    graph_builder.add_edge("hyde", "retrieve")
     graph_builder.add_edge("retrieve", "generate")
     graph_builder.add_edge("generate", "reflect")
     graph_builder.add_conditional_edges("reflect", get_next_step_from_plan, {
