@@ -258,8 +258,6 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         return {**state, "plan": plan, "next_step": next_step}
 
 
-
-
     # 1. Rewriter Agent
     rewriter_prompt = PromptTemplate.from_template(
         "사용자의 원래 질문: {query}\n이 질문의 목적을 파악 후, 더 명확하고 이해하기 쉽게 표현해줘"
@@ -271,6 +269,7 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         rewritten = rewriter_chain.invoke({"query": state["query"]}).content
         logger.info(f"Rewritten Query: {rewritten}")
         return {**state, "rewritten_query": rewritten, "next_step": "retrieve"}    
+
 
 
    # 1.5 HyDE Agent
@@ -288,12 +287,11 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
 
 
-
     # 2. Retriever Agent
     def retriever_node(state):
         logger.info("=================Retriever node 시작 =================")
         try:
-            query_for_retrieve = state.get("hypothetical_doc") or state["query"]
+            query_for_retrieve = state.get("hypothetical_doc")
             search_result = search_vectors_info(
                 milvus=milvus,
                 query=query_for_retrieve,
@@ -325,7 +323,6 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
 
 
 
-
     # 4. Reflector Agent
     reflector_prompt = PromptTemplate.from_template(
         """질문: {query}\n 응답: {response}\n
@@ -346,7 +343,6 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         logger.info(f"Feedback:\n{feedback}")
         logger.info(f"Feedback judged next_step = {next_step}")
         return {**state, "feedback": feedback, "next_step": next_step}
-
 
 
 
@@ -374,7 +370,6 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         "generate": "generate",
         "end": END,
     })
-
 
 
 
