@@ -16,10 +16,11 @@ from langchain_core.prompts import (
     PromptTemplate,
 )
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
-from langchain_openai import ChatOpenAI
+# from langchain_openai import ChatOpenAI
+from langchain_openai import AzureChatOpenAI
 from langgraph.graph import END, StateGraph
 from log.logging import get_logging
-from pymilvus import MilvusClient
+# from pymilvus import MilvusClient
 from service.agent.prompts import (
     basic_system_prompt_with_vector_search,
     generator_prompt,
@@ -29,7 +30,7 @@ from service.agent.prompts import (
     rewriter_prompt,
 )
 from service.model.agent import ChatRequest, ChatState
-from service.vectordb.milvus import search_vectors_info
+from service.vectordb.aisearch import search_vectors_info
 from sqlalchemy.orm import Session
 
 settings = get_setting()
@@ -37,6 +38,11 @@ logger = get_logging()
 
 OPENAI_API_KEY = settings.OPENAI_API_KEY
 USER_ID = settings.USER_ID
+DEPLOYMENT = settings.DEPLOYMENT
+MODEL_NAME = settings.MODEL_NAME
+AZURE_OPENAI_ENDPOINT = settings.AZURE_OPENAI_ENDPOINT
+AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
+AZURE_OPENAI_API_VERSION = settings.AZURE_OPENAI_API_VERSION
 
 
 def workflow_builder1(request: ChatRequest, db: Session):
@@ -61,12 +67,12 @@ def workflow_builder1(request: ChatRequest, db: Session):
     return result
 
 
-def workflow_builder2(request: ChatRequest, collection_name: str, db: Session, milvus: MilvusClient):
+def workflow_builder2(request: ChatRequest, db: Session):
     graph = StateGraph(ChatState)
 
     # 노드 추가
     graph.add_node("input", input_node)
-    graph.add_node("search_vector", partial(vector_node, collection_name=collection_name, milvus=milvus))
+    graph.add_node("search_vector", partial(vector_node))
     graph.add_node("llm", partial(llm_node_lcel, user_id=USER_ID, db=db))
     graph.add_node("output", partial(output_node, user_id=USER_ID, db=db))
 
@@ -86,11 +92,11 @@ def workflow_builder2(request: ChatRequest, collection_name: str, db: Session, m
     return result
 
 
-def workflow_builder3(request: ChatRequest, collection_name: str, db: Session, milvus: MilvusClient, memory: ConversationBufferMemory):
+def workflow_builder3(request: ChatRequest, db: Session, memory: ConversationBufferMemory):
     graph = StateGraph(ChatState)
     # 노드 추가
     graph.add_node("input", input_node)
-    graph.add_node("search_vector", partial(vector_node, collection_name=collection_name, milvus=milvus))
+    graph.add_node("search_vector", partial(vector_node))
     graph.add_node("llm", partial(llm_node_lcel_with_memory, user_id=USER_ID, db=db, memory=memory))
     graph.add_node("output", partial(output_node, user_id=USER_ID, db=db))
 
@@ -114,10 +120,11 @@ def input_node(state: "ChatState") -> "ChatState":
     return state
 
 
-def vector_node(state: "ChatState", collection_name: str, milvus: MilvusClient):
+def vector_node(state: "ChatState"):
     try:
-        search_result = search_vectors_info(milvus=milvus, query=state.message, collection_name=collection_name)
-        state.vector_result = search_result[0][0]["entity"]["text"]  # 벡터 검색 결과를 state에 저장
+        search_result = search_vectors_info(query=state.message)
+        print(search_result)
+        # state.vector_result = search_result[0][0]["entity"]["text"]  # 벡터 검색 결과를 state에 저장
         return state
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -138,7 +145,15 @@ def llm_node(state: "ChatState"):
 def llm_node_lcel(state: "ChatState", user_id: str, db: Session):
     try:
         # OpenAI LLM 사용
-        llm = ChatOpenAI(model="gpt-3.5-turbo", api_key=OPENAI_API_KEY)
+        # llm = ChatOpenAI(model="gpt-3.5-turbo", api_key=OPENAI_API_KEY)
+        # AzureOpenAI LLM 사용
+        llm = AzureChatOpenAI(
+            deployment_name=DEPLOYMENT,
+            model_name=MODEL_NAME,  
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+            api_key=AZURE_OPENAI_API_KEY,
+            api_version=AZURE_OPENAI_API_VERSION
+        )  
 
         # 프롬프트 템플릿 정의
         prompt = ChatPromptTemplate.from_messages(
@@ -168,8 +183,16 @@ def llm_node_lcel(state: "ChatState", user_id: str, db: Session):
 
 def llm_node_lcel_with_memory(state: "ChatState", user_id: str, db: Session, memory: ConversationBufferMemory):
     try:
-        # OpenAI LLM 사용
-        llm = ChatOpenAI(model="gpt-3.5-turbo", api_key=OPENAI_API_KEY)
+        # OpenAI LLM 사용   
+        # llm = ChatOpenAI(model="gpt-3.5-turbo", api_key=OPENAI_API_KEY)
+        # AzureOpenAI LLM 사용  
+        llm = AzureChatOpenAI(
+            deployment_name=DEPLOYMENT,
+            model_name=MODEL_NAME,
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+            api_key=AZURE_OPENAI_API_KEY,
+            api_version=AZURE_OPENAI_API_VERSION
+        )
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -227,7 +250,13 @@ def output_node(state: "ChatState", user_id: str, db: Session) -> Dict:
 
 def best_pratice(request, collection_name: str, db, milvus) -> Dict:
     # LLM 설정
-    llm = ChatOpenAI(model="gpt-4")
+    llm = AzureChatOpenAI(
+        deployment_name=DEPLOYMENT,
+        model_name=MODEL_NAME,
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        api_key=AZURE_OPENAI_API_KEY,
+        api_version=AZURE_OPENAI_API_VERSION
+    )
 
     def get_next_step_from_plan(state):
         return state.get("next_step", "generate")    
@@ -280,12 +309,11 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
         try:
             query_for_retrieve = state.get("hypothetical_doc")
             search_result = search_vectors_info(
-                milvus=milvus,
                 query=query_for_retrieve,
-                collection_name=collection_name
             )
-            parsed = search_result[0][0]["entity"]["text"]
-            return {**state, "documents": parsed, "next_step": "generate"}
+            # print(search_result)
+            # parsed = search_result[0][0]["entity"]["text"]
+            # return {**state, "documents": parsed, "next_step": "generate"}
         except Exception as e:
             logger.exception("Retriever Error")
             raise HTTPException(status_code=500, detail=str(e))

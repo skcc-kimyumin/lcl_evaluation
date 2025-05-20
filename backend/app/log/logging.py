@@ -14,7 +14,7 @@ if not os.path.exists(log_dir):
 
 # Load the config file
 logging_file = os.path.join(os.path.dirname(__file__), "logging_config.yaml")
-with open(logging_file, "rt") as f:
+with open(logging_file, "rt", encoding='utf-8') as f:
     config = yaml.safe_load(f.read())
     config["handlers"]["file"]["filename"] = log_dir + f"/{settings.APP_NAME}.log"
 

@@ -9,7 +9,7 @@ from database.database import get_db
 from fastapi import Depends, HTTPException
 from fastapi.security import APIKeyHeader
 from service.model.user import UserBase, UserRoles
-from vectordb.initialize import get_milvus
+# from vectordb.initialize import get_milvus
 
 settings = get_setting()
 
@@ -20,7 +20,7 @@ api_key_header = APIKeyHeader(name="Authorization")
 # RedisDep = Annotated[redis.StrictRedis, Depends(get_redis)]
 
 # --- Milvus ---
-MilvusDep = Annotated[Any, Depends(get_milvus)]
+# MilvusDep = Annotated[Any, Depends(get_milvus)]
 
 # --- Database ---
 DatabaseDep = Annotated[Any, Depends(get_db)]

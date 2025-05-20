@@ -2,10 +2,18 @@ from functools import lru_cache
 from typing import Any, Dict, Optional
 
 from pydantic import Field, validator
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+import os
 
+DOTENV = os.path.abspath('../.env')
 
 class Settings(BaseSettings):
+    
+    model_config = SettingsConfigDict(
+        env_file=DOTENV,
+        env_file_encoding="utf-8"
+    )
+        
     # APP SETTINGs
     APP_NAME: str = "admin"
     APP_PORT: str = "8000"
@@ -39,6 +47,13 @@ class Settings(BaseSettings):
     # VECTOR_DB_PORT: int = Field(default=19530, env="VECTOR_DB_PORT")
     USER_ID: str = Field(default="skcc", env="USER_ID")
     OPENAI_API_KEY: str = Field(default="", env="OPENAI_API_KEY")
+    AZURE_OPENAI_ENDPOINT: str = Field(default="", env="AZURE_OPENAI_ENDPOINT")
+    AZURE_OPENAI_API_KEY: str = Field(default="", env="AZURE_OPENAI_API_KEY")
+    AZURE_OPENAI_API_VERSION: str = Field(default="", env="AZURE_OPENAI_API_VERSION")
+    MODEL_NAME: str = Field(default="gpt-35-turbo", env="MODEL_NAME")
+    DEPLOYMENT: str = Field(default="gpt-35-turbo", env="DEPLOYMENT")
+    AZURE_SEARCH_KEY: str = Field(default="", env="AZURE_SEARCH_KEY")
+    AZURE_SEARCH_ENDPOINT: str = Field(default="", env="AZURE_SEARCH_ENDPOINT")    
 
     @validator("SQLALCHEMY_DATABASE_URL", pre=True)
     def assemble_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:

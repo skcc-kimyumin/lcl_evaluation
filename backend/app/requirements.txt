@@ -28,3 +28,6 @@ langchain-openai
 scikit-learn
 flask
 feedparser
+azure-core
+azure-search-documents
+azure-ai-search
