@@ -5,7 +5,8 @@ from pydantic import Field, validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import os
 
-DOTENV = os.path.abspath('../.env')
+DOTENV = os.path.abspath('backend/.env')
+print("***DOTENV", DOTENV)
 
 class Settings(BaseSettings):
     
@@ -53,7 +54,9 @@ class Settings(BaseSettings):
     MODEL_NAME: str = Field(default="gpt-35-turbo", env="MODEL_NAME")
     DEPLOYMENT: str = Field(default="gpt-35-turbo", env="DEPLOYMENT")
     AZURE_SEARCH_KEY: str = Field(default="", env="AZURE_SEARCH_KEY")
-    AZURE_SEARCH_ENDPOINT: str = Field(default="", env="AZURE_SEARCH_ENDPOINT")    
+    AZURE_SEARCH_ENDPOINT: str = Field(default="", env="AZURE_SEARCH_ENDPOINT")
+    AZURE_EMBEDDING_DEPLOYMENT: str = Field(default="", env="AZURE_EMBEDDING_DEPLOYMENT")
+    AZURE_EMBEDDING_API_VERSION: str = Field(default="", env="AZURE_EMBEDDING_API_VERSION")
 
     @validator("SQLALCHEMY_DATABASE_URL", pre=True)
     def assemble_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:

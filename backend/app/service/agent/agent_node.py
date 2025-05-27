@@ -43,6 +43,7 @@ MODEL_NAME = settings.MODEL_NAME
 AZURE_OPENAI_ENDPOINT = settings.AZURE_OPENAI_ENDPOINT
 AZURE_OPENAI_API_KEY = settings.AZURE_OPENAI_API_KEY
 AZURE_OPENAI_API_VERSION = settings.AZURE_OPENAI_API_VERSION
+INDEX_NAME = 'tax'
 
 
 def workflow_builder1(request: ChatRequest, db: Session):
@@ -96,7 +97,7 @@ def workflow_builder3(request: ChatRequest, db: Session, memory: ConversationBuf
     graph = StateGraph(ChatState)
     # 노드 추가
     graph.add_node("input", input_node)
-    graph.add_node("search_vector", partial(vector_node))
+    graph.add_node("search_vector", vector_node)
     graph.add_node("llm", partial(llm_node_lcel_with_memory, user_id=USER_ID, db=db, memory=memory))
     graph.add_node("output", partial(output_node, user_id=USER_ID, db=db))
 
@@ -122,9 +123,8 @@ def input_node(state: "ChatState") -> "ChatState":
 
 def vector_node(state: "ChatState"):
     try:
-        search_result = search_vectors_info(query=state.message)
-        print(search_result)
-        # state.vector_result = search_result[0][0]["entity"]["text"]  # 벡터 검색 결과를 state에 저장
+        search_result = search_vectors_info(query=state.message, index_name=INDEX_NAME)
+        state.vector_result = search_result[0]['text']  # 벡터 검색 결과를 state에 저장
         return state
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -248,7 +248,7 @@ def output_node(state: "ChatState", user_id: str, db: Session) -> Dict:
     return {"response": state.response}
 
 
-def best_pratice(request, collection_name: str, db, milvus) -> Dict:
+def best_pratice(request, db) -> Dict:
     # LLM 설정
     llm = AzureChatOpenAI(
         deployment_name=DEPLOYMENT,
@@ -310,10 +310,10 @@ def best_pratice(request, collection_name: str, db, milvus) -> Dict:
             query_for_retrieve = state.get("hypothetical_doc")
             search_result = search_vectors_info(
                 query=query_for_retrieve,
+                index_name=INDEX_NAME
             )
-            # print(search_result)
-            # parsed = search_result[0][0]["entity"]["text"]
-            # return {**state, "documents": parsed, "next_step": "generate"}
+            parsed = search_result[0]['text']
+            return {**state, "documents": parsed, "next_step": "generate"}
         except Exception as e:
             logger.exception("Retriever Error")
             raise HTTPException(status_code=500, detail=str(e))
